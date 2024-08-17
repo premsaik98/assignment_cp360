@@ -1,10 +1,21 @@
-from rest_framework import permissions
+import csv
+import xlsxwriter
+
+from io import BytesIO
+
+from django.http import JsonResponse, HttpResponse
+from django.shortcuts import get_object_or_404
+
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
-from django.shortcuts import get_object_or_404
+
+from product.permissions import IsAdminUser
+
 from .models import Product
 from .serializers import ProductSerializer
 
+
+from .tasks import generate_dummy_products
 
 class IsAuthenticatedAndActive(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -60,3 +71,44 @@ class ProductView(generics.GenericAPIView):
             product.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response({"detail": "You do not have permission to delete this product."}, status=status.HTTP_403_FORBIDDEN)
+
+
+
+class GenerateDummyProductsView(generics.GenericAPIView):
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, *args, **kwargs):
+        count = request.data.get('count', 1000)
+        generate_dummy_products.delay(count)
+        return JsonResponse({'status': 'Task initiated', 'message': f'{count} products will be generated.'})
+
+
+class ExportProductsExcelView(generics.GenericAPIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, *args, **kwargs):
+        output = BytesIO()
+        workbook = xlsxwriter.Workbook(output, {'in_memory': True})
+        worksheet = workbook.add_worksheet()
+
+        headers = ['ID', 'Title', 'Description', 'Price', 'Status', 'Uploaded By', 'Created At', 'Updated At']
+        for col_num, header in enumerate(headers):
+            worksheet.write(0, col_num, header)
+
+
+        products = Product.objects.all().values_list(
+            'id', 'title', 'description', 'price', 'status', 'uploaded_by__username', 'created_at', 'updated_at'
+        )
+
+
+        for row_num, row_data in enumerate(products, 1):
+            for col_num, cell_data in enumerate(row_data):
+                worksheet.write(row_num, col_num, cell_data)
+
+        workbook.close()
+        output.seek(0)
+
+        response = HttpResponse(output, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = 'attachment; filename="products.xlsx"'
+
+        return response
