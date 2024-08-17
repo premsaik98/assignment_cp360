@@ -8,7 +8,7 @@
     {% csrf_token %}
     {{ form.as_p }}
     <div class="submit-row">
-        <input type="submit" value="{% url 'Log in' %}" />
+        <input type="submit" value="{% trans 'Log in' %}" />
         <a class="button" href="{% url 'register' %}" style="margin-left: 10px;">Register</a>
     </div>
 </form>

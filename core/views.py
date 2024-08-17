@@ -51,11 +51,4 @@ def activate(request, uidb64, token):
 class CustomLoginView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)
-        user = User.objects.get(username=request.data['username'])
-        refresh = self.get_token(user)
-
-        response.data['refresh'] = str(refresh)
-        response.data['access'] = str(refresh.access_token)
-        response.data['role'] = 'admin' if user.is_superuser else 'staff' if user.is_staff else 'agent'
-
         return response
